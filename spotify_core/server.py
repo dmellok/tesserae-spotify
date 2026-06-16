@@ -45,12 +45,20 @@ AUTHORIZE_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
 NOW_PLAYING_URL = "https://api.spotify.com/v1/me/player/currently-playing"
 QUEUE_URL = "https://api.spotify.com/v1/me/player/queue"
-SCOPE = "user-read-currently-playing user-read-playback-state"
+TOP_TRACKS_URL = "https://api.spotify.com/v1/me/top/tracks"
+TOP_ARTISTS_URL = "https://api.spotify.com/v1/me/top/artists"
+# user-top-read added in spotify_core 0.2.0 to power the spotify_top
+# widget; existing connections need a one-time reconnect to grant it.
+SCOPE = "user-read-currently-playing user-read-playback-state user-top-read"
 USER_AGENT = "tesserae/0.1 (+spotify_core)"
 TOKENS_FILE = ".tokens.json"
 # Refresh a little before the hard expiry so a render never races the
 # boundary with a stale token.
 EXPIRY_SKEW_S = 60
+# Spotify's top-* endpoints clamp ``limit`` to 50; using a single 50
+# fetch lets the album-derived path aggregate from a meaningful pool
+# while keeping the request count to 1 per cell render.
+TOP_LIMIT_MAX = 50
 
 # Token refresh + file write must be atomic across concurrent renders
 # (the push pipeline renders one composition per distinct panel).
@@ -370,6 +378,169 @@ def queue() -> dict[str, Any]:
         "ok": True,
         "currently_playing": _track_summary(current),
         "queue": [_track_summary(item) for item in queue_items if isinstance(item, dict)],
+    }
+
+
+def _artist_summary(item: dict[str, Any]) -> dict[str, Any]:
+    """Compact normalised representation of a Spotify artist object.
+
+    For artists, the equivalent of "album art" is the artist's own image
+    (the one Spotify shows on the artist's profile). Genres replace the
+    "artist" secondary string. Followers count and popularity (0-100)
+    come along so the client can render a richer chip if it wants.
+    """
+    images = item.get("images") or []
+    art_large = images[0]["url"] if images else None
+    art_small = images[-1]["url"] if images else None
+    genres = [str(g) for g in (item.get("genres") or []) if isinstance(g, str)]
+    followers = ((item.get("followers") or {}).get("total")) or 0
+    return {
+        "name": item.get("name") or "",
+        "secondary": ", ".join(genres[:2]),
+        "art_large": art_large,
+        "art_small": art_small,
+        "followers": int(followers),
+        "popularity": int(item.get("popularity") or 0),
+    }
+
+
+def _track_for_top(item: dict[str, Any]) -> dict[str, Any]:
+    """Like ``_track_summary`` but with field names that match the
+    artist + album shapes (``name`` / ``secondary`` / ``art_large`` /
+    ``art_small``) so the spotify_top client can iterate over a
+    uniform list regardless of kind."""
+    album = item.get("album") or {}
+    images = album.get("images") or []
+    art_large = images[0]["url"] if images else None
+    art_small = images[-1]["url"] if images else None
+    artists = ", ".join(a.get("name", "") for a in (item.get("artists") or []) if a.get("name"))
+    return {
+        "name": item.get("name") or "",
+        "secondary": artists,
+        "art_large": art_large,
+        "art_small": art_small,
+        "album": album.get("name") or "",
+    }
+
+
+def _albums_from_tracks(tracks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate top tracks into a top-albums view.
+
+    Spotify exposes ``/me/top/tracks`` and ``/me/top/artists`` but not
+    ``/me/top/albums``; the standard derive groups top tracks by album
+    id, counts tracks per album, then ranks by count (ties broken by
+    the highest-ranked track's position). This is a heuristic, not
+    Spotify's own ranking, so the widget surfaces it as "Most-played
+    albums" rather than claiming authority.
+    """
+    by_id: dict[str, dict[str, Any]] = {}
+    for rank, track in enumerate(tracks):
+        album = track.get("album") or {}
+        album_id = album.get("id")
+        if not album_id:
+            continue
+        if album_id not in by_id:
+            images = album.get("images") or []
+            artists = ", ".join(
+                a.get("name", "")
+                for a in (album.get("artists") or track.get("artists") or [])
+                if a.get("name")
+            )
+            by_id[album_id] = {
+                "name": album.get("name") or "",
+                "secondary": artists,
+                "art_large": images[0]["url"] if images else None,
+                "art_small": images[-1]["url"] if images else None,
+                "track_count": 0,
+                "best_rank": rank,
+            }
+        by_id[album_id]["track_count"] += 1
+    return sorted(
+        by_id.values(),
+        key=lambda a: (-a["track_count"], a["best_rank"]),
+    )
+
+
+def top_items(kind: str, time_range: str, limit: int) -> dict[str, Any]:
+    """Return the user's top tracks / artists / albums-derived for a
+    given time window. Mirrors ``now_playing`` / ``queue`` for shape:
+
+    * not connected / config missing → ``{"connected": False, "error": "..."}``
+    * scope insufficient (HTTP 403 with insufficient_scope) →
+      ``{"connected": True, "error": "Reconnect Spotify to grant
+      user-top-read."}``
+    * ok → ``{"connected": True, "ok": True, "kind": ..., "time_range":
+      ..., "items": [...]}``
+
+    ``kind`` is ``"tracks"`` / ``"artists"`` / ``"albums"`` (the last is
+    derived from top tracks; see ``_albums_from_tracks``). ``time_range``
+    is one of Spotify's ``short_term`` (~4 weeks), ``medium_term``
+    (~6 months), ``long_term`` (~years).
+    """
+    if not has_credentials():
+        return {"connected": False, "error": "Add your Spotify Client ID + Secret in Settings."}
+    if not connected():
+        return {
+            "connected": False,
+            "error": "Spotify not connected, connect at Plugins → Spotify.",
+        }
+    if time_range not in ("short_term", "medium_term", "long_term"):
+        time_range = "short_term"
+    limit = max(1, min(TOP_LIMIT_MAX, int(limit or 10)))
+
+    if kind == "albums":
+        # Fetch the full 50-track pool to give the aggregation enough
+        # to pick a meaningful album set; we slice the derived list
+        # down to the requested limit afterwards.
+        fetch_limit = TOP_LIMIT_MAX
+        url = f"{TOP_TRACKS_URL}?time_range={time_range}&limit={fetch_limit}"
+    elif kind == "artists":
+        url = f"{TOP_ARTISTS_URL}?time_range={time_range}&limit={limit}"
+    else:
+        kind = "tracks"
+        url = f"{TOP_TRACKS_URL}?time_range={time_range}&limit={limit}"
+
+    try:
+        token = _valid_access_token()
+    except Exception as err:
+        return {"connected": False, "error": _coerce_error(err)}
+    try:
+        _, body = _api_get(url, token)
+    except urllib.error.HTTPError as err:
+        if err.code == 401:
+            try:
+                with _lock:
+                    _refresh_locked(_load_tokens())
+                _, body = _api_get(url, _valid_access_token())
+            except Exception as err2:
+                return {"connected": True, "error": _coerce_error(err2)}
+        elif err.code == 403:
+            # Almost always insufficient_scope on this endpoint, the
+            # user upgraded from spotify_core 0.1.x and hasn't
+            # reconnected yet.
+            return {
+                "connected": True,
+                "error": "Reconnect Spotify to grant the user-top-read scope.",
+            }
+        else:
+            return {"connected": True, "error": _coerce_error(err)}
+    except Exception as err:
+        return {"connected": True, "error": _coerce_error(err)}
+
+    raw_items = (body or {}).get("items") or []
+    if kind == "tracks":
+        items = [_track_for_top(it) for it in raw_items if isinstance(it, dict)]
+    elif kind == "artists":
+        items = [_artist_summary(it) for it in raw_items if isinstance(it, dict)]
+    else:
+        items = _albums_from_tracks([it for it in raw_items if isinstance(it, dict)])[:limit]
+
+    return {
+        "connected": True,
+        "ok": True,
+        "kind": kind,
+        "time_range": time_range,
+        "items": items,
     }
 
 

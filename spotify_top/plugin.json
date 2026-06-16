@@ -1,0 +1,57 @@
+{
+  "tesserae_compat": "1.x",
+  "name": "Spotify, Top",
+  "version": "0.1.0",
+  "kind": "widget",
+  "description": "Your top tracks, artists, or albums on Spotify for a chosen time window (last four weeks, six months, or all time). Cover art hero plus a smaller grid of runners-up. Requires Spotify Core 0.2.0+; existing installs need to hit Reconnect once to grant the user-top-read scope. 'Albums' is derived from top tracks (Spotify has no top-albums endpoint).",
+  "icon": "ph-chart-bar",
+  "supports": {
+    "sizes": ["sm", "md", "lg"]
+  },
+  "cell_options": [
+    {
+      "name": "kind",
+      "type": "select",
+      "label": "What to show",
+      "default": "tracks",
+      "choices": [
+        { "value": "tracks",  "label": "Top tracks"  },
+        { "value": "artists", "label": "Top artists" },
+        { "value": "albums",  "label": "Top albums (derived from tracks)" }
+      ]
+    },
+    {
+      "name": "time_range",
+      "type": "select",
+      "label": "Time window",
+      "default": "short_term",
+      "choices": [
+        { "value": "short_term",  "label": "Last 4 weeks"   },
+        { "value": "medium_term", "label": "Last 6 months"  },
+        { "value": "long_term",   "label": "All time"       }
+      ]
+    },
+    {
+      "name": "max_items",
+      "type": "number",
+      "label": "Items to show (1-10, hero counts as one)",
+      "default": 5
+    },
+    {
+      "name": "show_hero",
+      "type": "boolean",
+      "label": "Large hero card for the #1 item",
+      "default": true
+    },
+    {
+      "name": "show_rank",
+      "type": "boolean",
+      "label": "Show rank numbers (1, 2, 3...)",
+      "default": true
+    }
+  ],
+  "render": {
+    "dither": "floyd-steinberg",
+    "needs_network": true
+  }
+}

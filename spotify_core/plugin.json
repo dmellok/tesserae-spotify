@@ -1,9 +1,9 @@
 {
   "tesserae_compat": "1.x",
   "name": "Spotify Core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "kind": "data",
-  "description": "Shared Spotify connection for the spotify_* widgets. Paste your Spotify app's Client ID + Secret here, then connect your account once at Plugins → Spotify. Holds the OAuth tokens so every Spotify widget shows your now-playing track. No widget cell of its own.",
+  "description": "Shared Spotify connection for the spotify_* widgets. Paste your Spotify app's Client ID + Secret here, then connect your account once at Plugins → Spotify. Holds the OAuth tokens so every Spotify widget shows your now-playing track. Upgrading from 0.1.x: hit Reconnect once to grant the user-top-read scope (needed by the Spotify Top widget). No widget cell of its own.",
   "icon": "ph-spotify-logo",
   "supports": { "sizes": ["sm", "md", "lg"] },
   "settings": [
