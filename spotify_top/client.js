@@ -296,8 +296,7 @@ export default function render(shadow, ctx) {
        orientation: landscape is preferred over min-aspect-ratio here
        because Chromium has inconsistent support for the latter inside
        container queries; orientation has been stable since Chrome 105. */
-    @container (orientation: landscape) and (min-width: 281px),
-    @container (max-height: 360px) and (min-width: 281px) {
+    @container ((orientation: landscape) or (max-height: 360px)) and (min-width: 281px) {
       .st-grid {
         grid-template-columns: minmax(35%, auto) 1fr;
         align-items: stretch;
@@ -311,13 +310,21 @@ export default function render(shadow, ctx) {
          stacked default (width 100%, aspect-ratio 1/1) would size the
          art off the column width and could overflow the row when the
          cell is shorter than the column is wide. Pin to height
-         instead so the art shrinks to fit. */
+         instead so the art shrinks to fit. Left-aligned (the flex
+         column default) so the meta below it lines up cleanly with
+         the art's left edge. */
       .st-hero-art {
         width: auto;
         height: 100%;
         max-width: 100%;
         max-height: 100%;
-        align-self: center;
+        align-self: flex-start;
+      }
+      /* Meta lines up its left edge with the art's left edge: art is
+         flex-start in the column, meta is width: 100% with default
+         left-aligned text starting at column-left. */
+      .st-hero-meta {
+        width: 100%;
       }
     }
   `;
