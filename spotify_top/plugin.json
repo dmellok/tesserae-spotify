@@ -1,7 +1,7 @@
 {
   "tesserae_compat": "1.x",
   "name": "Spotify, Top",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "kind": "widget",
   "description": "Your top tracks, artists, or albums on Spotify for a chosen time window (last four weeks, six months, or all time). Cover art hero plus a smaller grid of runners-up. Requires Spotify Core 0.2.0+; existing installs need to hit Reconnect once to grant the user-top-read scope. 'Albums' is derived from top tracks (Spotify has no top-albums endpoint).",
   "icon": "ph-chart-bar",

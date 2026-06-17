@@ -283,10 +283,10 @@ export default function render(shadow, ctx) {
        height for a stacked hero + list to both read well, switch to a
        side-by-side layout (hero on the left, list on the right). The
        trigger fires on EITHER:
-       - short cells (``max-height: 360px``) regardless of orientation, OR
-       - landscape cells (``min-aspect-ratio: 1/1``) where horizontal
+       - short cells (max-height 360px) regardless of orientation, OR
+       - landscape cells (aspect ratio at least 1:1) where horizontal
          space is the abundant resource.
-       Both are gated on ``min-width: 281px`` so very narrow cells (the
+       Both are gated on a min-width of 281px so very narrow cells (the
        xs branch above) still drop the list entirely instead of trying
        to cram it next to a postage-stamp hero. */
     @container (max-height: 360px) and (min-width: 281px),
@@ -300,9 +300,9 @@ export default function render(shadow, ctx) {
         min-width: 0;
       }
       /* In side-by-side mode the row height drives the art size. The
-         stacked default ``width: 100%; aspect-ratio: 1/1`` would size
-         the art off the column width and could overflow the row when
-         the cell is shorter than the column is wide. Pin to height
+         stacked default (width 100%, aspect-ratio 1/1) would size the
+         art off the column width and could overflow the row when the
+         cell is shorter than the column is wide. Pin to height
          instead so the art shrinks to fit. */
       .st-hero-art {
         width: auto;
