@@ -185,6 +185,10 @@ export default function render(shadow, ctx) {
       position: relative;
       width: 100%;
       aspect-ratio: 1 / 1;
+      /* Cap at the cell's vertical room so a wide-but-short cell
+         (e.g. top half of a 1200x1600 panel = 1200x800) doesn't
+         render a 1200x1200 square that overflows or crops. */
+      max-height: 100cqb;
       border-radius: var(--radius-1, 8px);
       box-shadow: 0 1px 3px color-mix(in oklab, black 12%, transparent);
     }
@@ -283,21 +287,25 @@ export default function render(shadow, ctx) {
        height for a stacked hero + list to both read well, switch to a
        side-by-side layout (hero on the left, list on the right). The
        trigger fires on EITHER:
-       - short cells (max-height 360px) regardless of orientation, OR
-       - landscape cells (aspect ratio at least 1:1) where horizontal
-         space is the abundant resource.
-       Both are gated on a min-width of 281px so very narrow cells (the
-       xs branch above) still drop the list entirely instead of trying
-       to cram it next to a postage-stamp hero. */
-    @container (max-height: 360px) and (min-width: 281px),
-    @container (min-aspect-ratio: 1/1) and (min-width: 281px) {
+       - landscape cells where horizontal space is the abundant resource, OR
+       - short cells (max-height 360px) regardless of orientation.
+       Both gated on min-width 281px so very narrow cells (the xs
+       branch above) still drop the list entirely instead of trying to
+       cram it next to a postage-stamp hero.
+
+       orientation: landscape is preferred over min-aspect-ratio here
+       because Chromium has inconsistent support for the latter inside
+       container queries; orientation has been stable since Chrome 105. */
+    @container (orientation: landscape) and (min-width: 281px),
+    @container (max-height: 360px) and (min-width: 281px) {
       .st-grid {
-        grid-template-columns: minmax(30%, auto) 1fr;
+        grid-template-columns: minmax(35%, auto) 1fr;
         align-items: stretch;
       }
       .st-hero {
         justify-content: center;
         min-width: 0;
+        min-height: 0;
       }
       /* In side-by-side mode the row height drives the art size. The
          stacked default (width 100%, aspect-ratio 1/1) would size the
@@ -308,6 +316,7 @@ export default function render(shadow, ctx) {
         width: auto;
         height: 100%;
         max-width: 100%;
+        max-height: 100%;
         align-self: center;
       }
     }
